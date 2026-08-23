@@ -1,7 +1,13 @@
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { config } from '../config.js';
 import * as schema from './schema.js';
+
+// На Railway база лежит на подключённом томе (например /data/telemusic.db) —
+// каталог может не существовать при первом запуске.
+mkdirSync(dirname(config.databasePath), { recursive: true });
 
 const sqlite = new Database(config.databasePath);
 sqlite.pragma('journal_mode = WAL');

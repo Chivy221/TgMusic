@@ -6,9 +6,14 @@
     "server",
     "miniapp"
   ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev:server": "npm run dev -w @telemusic/server",
     "dev:miniapp": "npm run dev -w @telemusic/miniapp",
-    "build": "npm run build -w @telemusic/miniapp && npm run build -w @telemusic/server"
+    "check": "npm run check -w @telemusic/server",
+    "build": "npm run build -w @telemusic/miniapp && npm run build -w @telemusic/server",
+    "start": "npm run start -w @telemusic/server"
   }
 }
