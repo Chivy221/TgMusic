@@ -1,0 +1,14 @@
+{
+  "name": "telemusic",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "server",
+    "miniapp"
+  ],
+  "scripts": {
+    "dev:server": "npm run dev -w @telemusic/server",
+    "dev:miniapp": "npm run dev -w @telemusic/miniapp",
+    "build": "npm run build -w @telemusic/miniapp && npm run build -w @telemusic/server"
+  }
+}
