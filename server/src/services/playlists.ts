@@ -34,6 +34,40 @@ export function createPlaylist(ownerId: number, title: string): Playlist {
     .get();
 }
 
+/**
+ * Плейлист, привязанный к группе-источнику.
+ *
+ * Историю группы бот прочитать не может — в Bot API нет метода для прошлых
+ * сообщений. Поэтому связь работает только вперёд: всё, что появится в группе
+ * после подключения, дописывается сюда. Старое переносится пересылкой в личку.
+ */
+export function createLinkedPlaylist(ownerId: number, title: string, sourceChatId: number): Playlist {
+  return db
+    .insert(playlists)
+    .values({
+      ownerId,
+      title: title.trim().slice(0, 80) || 'Без названия',
+      sourceChatId,
+      syncEnabled: 1,
+      createdAt: now(),
+    })
+    .returning()
+    .get();
+}
+
+export function findBySourceChat(chatId: number): Playlist | undefined {
+  return db.select().from(playlists).where(eq(playlists.sourceChatId, chatId)).get();
+}
+
+export function setSync(playlist: Playlist, enabled: boolean): Playlist {
+  return db
+    .update(playlists)
+    .set({ syncEnabled: enabled ? 1 : 0 })
+    .where(eq(playlists.id, playlist.id))
+    .returning()
+    .get();
+}
+
 export function getPlaylist(id: number): Playlist | undefined {
   return db.select().from(playlists).where(eq(playlists.id, id)).get();
 }
@@ -133,6 +167,59 @@ export function clone(source: Playlist, newOwnerId: number): Playlist {
   });
 
   return copy;
+}
+
+export function renamePlaylist(playlist: Playlist, title: string): Playlist {
+  const clean = title.trim().slice(0, 80);
+  if (!clean) throw new AppError('empty_title', 'Название не может быть пустым');
+
+  return db
+    .update(playlists)
+    .set({ title: clean })
+    .where(eq(playlists.id, playlist.id))
+    .returning()
+    .get();
+}
+
+/**
+ * «Смешать все» — один плейлист из всех треков пользователя, в случайном порядке.
+ * Дубли схлопываются: один и тот же трек может лежать в нескольких плейлистах.
+ */
+export function mergeAll(ownerId: number, title?: string): Playlist {
+  const owned = db.select().from(playlists).where(eq(playlists.ownerId, ownerId)).all();
+
+  const seen = new Set<number>();
+  const pool: number[] = [];
+
+  for (const source of owned) {
+    for (const track of getPlaylistTracks(source.id)) {
+      if (seen.has(track.id)) continue;
+      seen.add(track.id);
+      pool.push(track.id);
+    }
+  }
+
+  if (pool.length === 0) {
+    throw new AppError('nothing_to_merge', 'Пока нечего смешивать — плейлисты пусты');
+  }
+
+  shuffle(pool);
+
+  const mixed = createPlaylist(ownerId, title?.trim() || 'Всё вперемешку');
+  pool.forEach((trackId, index) => {
+    db.insert(playlistItems)
+      .values({ playlistId: mixed.id, trackId, position: index + 1 })
+      .run();
+  });
+
+  return mixed;
+}
+
+function shuffle(items: number[]): void {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
 }
 
 export function deletePlaylist(playlist: Playlist): void {

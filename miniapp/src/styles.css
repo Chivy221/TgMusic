@@ -21,7 +21,7 @@ body {
 }
 
 .app {
-  padding: 12px 12px 88px;
+  padding: 12px 12px 32px;
   max-width: 640px;
   margin: 0 auto;
 }
@@ -118,6 +118,23 @@ button {
   color: var(--danger);
 }
 
+.play {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 13px;
+  line-height: 34px;
+  padding: 0 0 0 2px;
+}
+
+.play:disabled {
+  opacity: 0.5;
+}
+
 .input {
   flex: 1;
   min-width: 0;
@@ -169,6 +186,23 @@ button {
   display: flex;
   gap: 8px;
   margin-bottom: 14px;
+}
+
+.field {
+  margin-bottom: 10px;
+}
+
+.field label {
+  display: block;
+  margin: 0 0 4px 4px;
+}
+
+.field .input {
+  width: 100%;
+}
+
+.btn.danger.grow {
+  background: var(--section);
 }
 
 .empty {

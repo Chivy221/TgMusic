@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { createMiddleware } from 'hono/factory';
 import { config } from '../config.js';
 import { ensureUser } from '../services/catalog.js';
+import { resolveSession } from '../services/sessions.js';
 
 export type Env = { Variables: { userId: number } };
 
@@ -49,14 +50,30 @@ export function verifyInitData(initData: string): TelegramUser | null {
   }
 }
 
+/**
+ * Два пути входа:
+ *  tma <initData>  — мини-апп внутри Telegram, подпись проверяется на каждом запросе;
+ *  Bearer <token>  — установленное PWA, где initData недоступен.
+ */
 export const auth = createMiddleware<Env>(async (c, next) => {
   const header = c.req.header('Authorization') ?? '';
-  const initData = header.startsWith('tma ') ? header.slice(4) : '';
 
-  const user = initData ? verifyInitData(initData) : null;
-  if (!user) return c.json({ error: 'unauthorized' }, 401);
+  if (header.startsWith('tma ')) {
+    const user = verifyInitData(header.slice(4));
+    if (!user) return c.json({ error: 'unauthorized' }, 401);
 
-  ensureUser(user.id, user.username, user.first_name);
-  c.set('userId', user.id);
-  await next();
+    ensureUser(user.id, user.username, user.first_name);
+    c.set('userId', user.id);
+    return next();
+  }
+
+  if (header.startsWith('Bearer ')) {
+    const userId = resolveSession(header.slice(7));
+    if (userId === null) return c.json({ error: 'unauthorized' }, 401);
+
+    c.set('userId', userId);
+    return next();
+  }
+
+  return c.json({ error: 'unauthorized' }, 401);
 });

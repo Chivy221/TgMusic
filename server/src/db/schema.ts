@@ -5,10 +5,34 @@ export const users = sqliteTable('users', {
   id: integer('id').primaryKey(),
   username: text('username'),
   firstName: text('first_name'),
-  /** Канал «Моя музыка», куда бот выкладывает плейлист для нативного плеера. */
+  /**
+   * Куда бот выкладывает плейлист. Если пусто — прямо в личку с ботом.
+   * Канал надёжнее: в личке свои сообщения удаляются только первые 48 часов.
+   */
   playbackChatId: integer('playback_chat_id'),
+  /** Сбор плейлиста через бота: /new → название → треки → /done. */
+  draftPlaylistId: integer('draft_playlist_id'),
+  draftStage: text('draft_stage', { enum: ['awaiting_title', 'collecting'] }),
   createdAt: integer('created_at').notNull(),
 });
+
+/**
+ * Личные правки названия и исполнителя.
+ *
+ * Сам трек в каталоге общий — он дедуплицируется по file_unique_id и может быть
+ * в фонотеках у тысячи людей. Поэтому переименование не трогает канонический
+ * трек, а живёт отдельной записью на пользователя.
+ */
+export const trackOverrides = sqliteTable(
+  'track_overrides',
+  {
+    userId: integer('user_id').notNull(),
+    trackId: integer('track_id').notNull(),
+    title: text('title'),
+    performer: text('performer'),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.userId, t.trackId] }) }),
+);
 
 /**
  * Канонический трек в канале-хранилище.
@@ -55,6 +79,10 @@ export const playlists = sqliteTable(
     slug: text('slug').unique(),
     /** Откуда склонирован, если это чужой добавленный плейлист. */
     sourcePlaylistId: integer('source_playlist_id'),
+    /** Группа-источник: всё аудио оттуда дописывается в этот плейлист. */
+    sourceChatId: integer('source_chat_id'),
+    /** Следить за группой: новые треки дописывать, переименование подхватывать. */
+    syncEnabled: integer('sync_enabled').notNull().default(0),
     createdAt: integer('created_at').notNull(),
   },
   (t) => ({ ownerIdx: index('playlists_owner_idx').on(t.ownerId) }),
@@ -69,6 +97,21 @@ export const playlistItems = sqliteTable(
     position: integer('position').notNull(),
   },
   (t) => ({ playlistIdx: index('playlist_items_playlist_idx').on(t.playlistId) }),
+);
+
+/**
+ * Сессия для PWA: вне Telegram нет initData, а фон на iOS работает только там.
+ * Токен выдаётся из мини-аппа, где личность уже подтверждена подписью.
+ */
+export const sessions = sqliteTable(
+  'sessions',
+  {
+    token: text('token').primaryKey(),
+    userId: integer('user_id').notNull(),
+    createdAt: integer('created_at').notNull(),
+    lastSeenAt: integer('last_seen_at').notNull(),
+  },
+  (t) => ({ userIdx: index('sessions_user_idx').on(t.userId) }),
 );
 
 /** Что бот уже выложил в канал пользователя — чтобы вычистить при смене плейлиста. */

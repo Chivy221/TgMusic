@@ -1,6 +1,14 @@
-import { tg } from './telegram';
+import { insideTelegram, sessionToken, tg } from './telegram';
 
 const BASE = import.meta.env.VITE_API_URL ?? '';
+
+/** Внутри Telegram — подпись initData, в установленном PWA — токен сессии. */
+function authorization(): string {
+  if (insideTelegram()) return `tma ${tg?.initData}`;
+
+  const token = sessionToken();
+  return token ? `Bearer ${token}` : '';
+}
 
 export type Track = {
   id: number;
@@ -15,8 +23,19 @@ export type Playlist = {
   isPublic: number;
   slug: string | null;
   sourcePlaylistId: number | null;
+  /** Группа-источник, если плейлист собран из чата. */
+  sourceChatId: number | null;
+  syncEnabled: number;
   trackCount?: number;
 };
+
+export type PlayResult = {
+  url: string;
+  total: number;
+  posted: number;
+};
+
+export type PlatformLink = { platform: string; url: string; exact: boolean };
 
 export class ApiError extends Error {
   constructor(
@@ -32,8 +51,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      // Единственная авторизация: сервер проверяет подпись initData ключом от токена бота.
-      Authorization: `tma ${tg?.initData ?? ''}`,
+      Authorization: authorization(),
       ...init?.headers,
     },
   });
@@ -46,7 +64,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  me: () => request<{ hasPlaybackChannel: boolean; firstName?: string }>('/me'),
+  me: () =>
+    request<{ hasPlayerChat: boolean; playerChatTitle: string | null; firstName?: string }>('/me'),
+
+  createSession: () => request<{ token: string; url: string }>('/session', { method: 'POST' }),
 
   library: () => request<{ tracks: Track[] }>('/library'),
 
@@ -60,6 +81,24 @@ export const api = {
       body: JSON.stringify({ title }),
     }),
 
+  mergeAll: (title?: string) =>
+    request<{ playlist: Playlist }>('/playlists/merge', {
+      method: 'POST',
+      body: JSON.stringify({ title }),
+    }),
+
+  renamePlaylist: (id: number, title: string) =>
+    request<{ playlist: Playlist }>(`/playlists/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title }),
+    }),
+
+  setSync: (id: number, syncEnabled: boolean) =>
+    request<{ playlist: Playlist }>(`/playlists/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ syncEnabled }),
+    }),
+
   deletePlaylist: (id: number) => request(`/playlists/${id}`, { method: 'DELETE' }),
 
   addTrack: (playlistId: number, trackId: number) =>
@@ -71,10 +110,22 @@ export const api = {
   removeTrack: (playlistId: number, trackId: number) =>
     request(`/playlists/${playlistId}/tracks/${trackId}`, { method: 'DELETE' }),
 
-  play: (id: number) =>
-    request<{ url: string; total: number; posted: number }>(`/playlists/${id}/play`, {
+  play: (id: number, fromTrackId?: number) =>
+    request<PlayResult>(`/playlists/${id}/play`, {
       method: 'POST',
+      body: JSON.stringify({ fromTrackId }),
     }),
+
+  playTrack: (trackId: number) => request<PlayResult>(`/tracks/${trackId}/play`, { method: 'POST' }),
+
+  clearPlayer: () => request<{ deleted: number }>('/player/clear', { method: 'POST' }),
+
+  renameTrack: (id: number, values: { title?: string | null; performer?: string | null }) =>
+    request<{ track: Track }>(`/tracks/${id}`, { method: 'PATCH', body: JSON.stringify(values) }),
+
+  sendTrack: (id: number) => request(`/tracks/${id}/send`, { method: 'POST' }),
+
+  links: (id: number) => request<{ links: PlatformLink[] }>(`/tracks/${id}/links`),
 
   publish: (id: number) =>
     request<{ playlist: Playlist; shareUrl: string }>(`/playlists/${id}/publish`, { method: 'POST' }),

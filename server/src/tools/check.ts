@@ -52,6 +52,15 @@ try {
   } else {
     ok('inline-режим включён');
   }
+
+  // Без этого в группе бот видит только команды — музыку из чата-источника не заберёт.
+  if (!me.can_read_all_group_messages) {
+    warn('Privacy mode включён: в группах бот увидит только команды.');
+    warn('Чтобы забирать музыку из групп: @BotFather → /setprivacy → Disable.');
+    warn('Либо делай бота администратором в каждой такой группе.');
+  } else {
+    ok('privacy mode выключен — видит сообщения в группах');
+  }
 } catch (error) {
   fail(`Telegram отклонил токен: ${describe(error)}`);
   process.exit(1);

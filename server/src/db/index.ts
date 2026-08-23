@@ -23,7 +23,17 @@ export function migrate(): void {
       username TEXT,
       first_name TEXT,
       playback_chat_id INTEGER,
+      draft_playlist_id INTEGER,
+      draft_stage TEXT,
       created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS track_overrides (
+      user_id INTEGER NOT NULL,
+      track_id INTEGER NOT NULL,
+      title TEXT,
+      performer TEXT,
+      PRIMARY KEY (user_id, track_id)
     );
 
     CREATE TABLE IF NOT EXISTS tracks (
@@ -54,6 +64,8 @@ export function migrate(): void {
       is_public INTEGER NOT NULL DEFAULT 0,
       slug TEXT UNIQUE,
       source_playlist_id INTEGER,
+      source_chat_id INTEGER,
+      sync_enabled INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS playlists_owner_idx ON playlists (owner_id);
@@ -66,6 +78,14 @@ export function migrate(): void {
     );
     CREATE INDEX IF NOT EXISTS playlist_items_playlist_idx ON playlist_items (playlist_id);
 
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      last_seen_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id);
+
     CREATE TABLE IF NOT EXISTS posted_messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -74,4 +94,18 @@ export function migrate(): void {
     );
     CREATE INDEX IF NOT EXISTS posted_messages_user_idx ON posted_messages (user_id);
   `);
+
+  // Базы, созданные до появления колонки, CREATE TABLE IF NOT EXISTS не чинит.
+  addColumn('users', 'draft_playlist_id', 'INTEGER');
+  addColumn('users', 'draft_stage', 'TEXT');
+  addColumn('playlists', 'source_chat_id', 'INTEGER');
+  addColumn('playlists', 'sync_enabled', 'INTEGER NOT NULL DEFAULT 0');
+}
+
+function addColumn(table: string, column: string, definition: string): void {
+  const columns = sqlite.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (columns.some((item) => item.name === column)) return;
+
+  sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  console.log(`[db] добавлена колонка ${table}.${column}`);
 }
