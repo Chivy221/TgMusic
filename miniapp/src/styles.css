@@ -12,12 +12,21 @@
   box-sizing: border-box;
 }
 
+html {
+  /* Safari масштабирует текст при повороте экрана, если не запретить. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
   font: 15px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-tap-highlight-color: transparent;
+  /* Отключает задержку 300 мс и зум двойным тапом. */
+  touch-action: manipulation;
+  overscroll-behavior-y: none;
 }
 
 .app {
@@ -144,6 +153,8 @@ button {
   background: var(--section);
   color: var(--text);
   font: inherit;
+  /* Меньше 16px — и Safari на iOS приближает страницу при фокусе, несмотря на viewport. */
+  font-size: 16px;
 }
 
 .hint {
@@ -161,10 +172,46 @@ button {
   font-size: 14px;
 }
 
-.notice ol {
-  margin: 8px 0 0;
+.notice ol,
+.notice ul {
+  margin: 8px 0;
   padding-left: 18px;
   color: var(--hint);
+}
+
+.notice .sub {
+  white-space: normal;
+}
+
+.warn {
+  margin-top: 8px;
+  white-space: normal;
+  color: var(--danger);
+}
+
+/* Полоса хода загрузки: качается медленно, без неё непонятно, живо ли оно. */
+.bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg);
+  margin: 10px 0 8px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+/* Выбор плеера: карточка-переключатель, активная подсвечена рамкой. */
+.card.pick {
+  margin-top: 8px;
+  border: 1px solid transparent;
+}
+
+.card.pick[data-active='true'] {
+  border-color: var(--accent);
 }
 
 .header {

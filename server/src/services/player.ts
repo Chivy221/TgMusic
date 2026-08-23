@@ -6,6 +6,7 @@ import { config } from '../config.js';
 import { getUser, type Track } from './catalog.js';
 import { getPlaylistTracks, type Playlist } from './playlists.js';
 import { applyOverrides } from './overrides.js';
+import { applyVariants } from './variants.js';
 import { AppError, messageLink, sleep } from '../utils.js';
 
 /** Не даём одному пользователю запустить две перезаписи группы одновременно. */
@@ -42,8 +43,10 @@ export async function playTracks(userId: number, queue: Track[]): Promise<PlayRe
   }
   busy.add(userId);
 
-  // Названия показываем такими, какими их видит владелец, с его правками.
-  const tracks = applyOverrides(userId, queue);
+  // Названия показываем такими, какими их видит владелец, с его правками. Там, где
+  // под правку залита личная копия файла, играет она: иначе Telegram покажет
+  // старые теги, зашитые в исходный файл.
+  const tracks = applyVariants(userId, applyOverrides(userId, queue));
   const chatId = user.playbackChatId;
 
   try {

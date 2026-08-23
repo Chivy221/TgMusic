@@ -51,10 +51,19 @@ export const tracks = sqliteTable(
     performer: text('performer'),
     duration: integer('duration'),
     fileSize: integer('file_size'),
+    /**
+     * Откуда скачан, если трек приехал по ссылке: `youtube:dQw4w9WgXcQ`.
+     * Дедуп по file_unique_id тут не работает — каждая загрузка даёт свои байты,
+     * поэтому одинаковость определяем по источнику.
+     */
+    sourceKey: text('source_key'),
     addedBy: integer('added_by').notNull(),
     createdAt: integer('created_at').notNull(),
   },
-  (t) => ({ performerIdx: index('tracks_performer_idx').on(t.performer) }),
+  (t) => ({
+    performerIdx: index('tracks_performer_idx').on(t.performer),
+    sourceIdx: index('tracks_source_idx').on(t.sourceKey),
+  }),
 );
 
 /** Личная фонотека: какие треки пользователь считает своими. */
@@ -124,4 +133,56 @@ export const postedMessages = sqliteTable(
     messageId: integer('message_id').notNull(),
   },
   (t) => ({ userIdx: index('posted_messages_user_idx').on(t.userId) }),
+);
+
+/**
+ * Чаты, в которых бот оказался вместе с пользователем.
+ *
+ * Нужны, чтобы плеер выбирался списком в настройках, а не единственной кнопкой
+ * в переписке в момент добавления: кнопку легко пролистать, а группа у человека
+ * не одна. Права проверяются заново при выборе — статус мог измениться.
+ */
+export const chats = sqliteTable('chats', {
+  id: integer('id').primaryKey(),
+  title: text('title'),
+  type: text('type'),
+  /** Статус бота: administrator / member / left / kicked. */
+  botStatus: text('bot_status'),
+  botCanDelete: integer('bot_can_delete').notNull().default(0),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+/** Кто из пользователей видел этот чат — чужие группы в списке не показываем. */
+export const chatMembers = sqliteTable(
+  'chat_members',
+  {
+    userId: integer('user_id').notNull(),
+    chatId: integer('chat_id').notNull(),
+    addedAt: integer('added_at').notNull(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.userId, t.chatId] }) }),
+);
+
+/**
+ * Личная перезалитая копия трека.
+ *
+ * Telegram берёт название и исполнителя из атрибутов сохранённого файла: при
+ * отправке по file_id переданные title и performer игнорируются. Поэтому правка
+ * имени видна в Telegram только у нового файла — заливаем копию с нужными тегами
+ * и дальше шлём её вместо оригинала. Оригинал в каталоге не трогаем: он общий.
+ */
+export const trackVariants = sqliteTable(
+  'track_variants',
+  {
+    userId: integer('user_id').notNull(),
+    trackId: integer('track_id').notNull(),
+    fileId: text('file_id').notNull(),
+    fileUniqueId: text('file_unique_id').notNull(),
+    storageMessageId: integer('storage_message_id').notNull(),
+    /** С какими тегами залито — чтобы понять, не устарела ли копия. */
+    title: text('title'),
+    performer: text('performer'),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.userId, t.trackId] }) }),
 );

@@ -1,9 +1,10 @@
 import { and, desc, eq, like, or } from 'drizzle-orm';
+import { InputFile } from 'grammy';
 import { db } from '../db/index.js';
 import { library, tracks, users } from '../db/schema.js';
 import { bot } from '../bot/bot.js';
 import { config } from '../config.js';
-import { now } from '../utils.js';
+import { AppError, now } from '../utils.js';
 
 export type IncomingAudio = {
   fileId: string;
@@ -120,4 +121,61 @@ export function isInLibrary(userId: number, trackId: number): boolean {
       .where(and(eq(library.userId, userId), eq(library.trackId, trackId)))
       .get() !== undefined
   );
+}
+
+/**
+ * Кладёт в каталог трек, скачанный по ссылке.
+ *
+ * Отличие от ingestAudio одно, но существенное: файла в Telegram ещё нет,
+ * поэтому байты заливаются с диска. Дедуп по file_unique_id тут бесполезен —
+ * две загрузки одного ролика дают разные файлы, — так что одинаковость
+ * определяем по источнику: youtube:<id> у всех совпадёт.
+ */
+export async function ingestDownloaded(
+  file: { path: string; title: string | null; performer: string | null; duration: number | null; sourceKey: string },
+  userId: number,
+): Promise<{ track: Track; isNew: boolean }> {
+  const existing = getTrackBySource(file.sourceKey);
+  if (existing) {
+    addToLibrary(userId, existing.id);
+    return { track: existing, isNew: false };
+  }
+
+  const name = [file.performer, file.title].filter(Boolean).join(' - ') || 'track';
+  const message = await bot.api.sendAudio(
+    config.storageChannelId,
+    new InputFile(file.path, `${name.replace(/[/\\?%*:|"<>]/g, '_').slice(0, 60)}.mp3`),
+    {
+      title: file.title ?? undefined,
+      performer: file.performer ?? undefined,
+      duration: file.duration ?? undefined,
+      disable_notification: true,
+    },
+  );
+
+  if (!message.audio) throw new AppError('not_audio', 'Telegram не признал скачанный файл аудио');
+
+  const track = db
+    .insert(tracks)
+    .values({
+      fileUniqueId: message.audio.file_unique_id,
+      fileId: message.audio.file_id,
+      storageMessageId: message.message_id,
+      title: file.title,
+      performer: file.performer,
+      duration: file.duration ?? message.audio.duration ?? null,
+      fileSize: message.audio.file_size ?? null,
+      sourceKey: file.sourceKey,
+      addedBy: userId,
+      createdAt: now(),
+    })
+    .returning()
+    .get();
+
+  addToLibrary(userId, track.id);
+  return { track, isNew: true };
+}
+
+export function getTrackBySource(sourceKey: string): Track | undefined {
+  return db.select().from(tracks).where(eq(tracks.sourceKey, sourceKey)).get();
 }

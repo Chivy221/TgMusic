@@ -37,6 +37,47 @@ export type PlayResult = {
 
 export type PlatformLink = { platform: string; url: string; exact: boolean };
 
+/** Группа, куда добавлен бот. Из таких и выбирается плеер. */
+export type KnownChat = {
+  id: number;
+  title: string;
+  type: string;
+  isAdmin: boolean;
+  canDelete: boolean;
+  isPlayer: boolean;
+};
+
+export type ImportEntry = { title: string; performer: string | null; trackId: number | null };
+
+export type ImportResult = {
+  source: string;
+  kind: 'track' | 'album' | 'playlist';
+  name: string;
+  partial: boolean;
+  found: ImportEntry[];
+  missing: ImportEntry[];
+  /** Есть ли чем дозагрузить ненайденное: на сервере должен стоять yt-dlp. */
+  canDownload: boolean;
+};
+
+export type DownloadJob = {
+  id: string;
+  state: 'running' | 'done' | 'failed';
+  name: string;
+  source: string;
+  total: number;
+  done: number;
+  added: Array<{ title: string; performer: string | null; trackId: number; downloaded: boolean }>;
+  failed: Array<{ title: string; performer: string | null; reason: string }>;
+  error: string | null;
+};
+
+/**
+ * Что стало с личной копией файла после переименования. Telegram показывает теги
+ * из самого файла, поэтому правка видна в плеере только после перезаливки.
+ */
+export type VariantStatus = 'applied' | 'reverted' | 'unchanged' | 'too_big' | 'failed';
+
 export class ApiError extends Error {
   constructor(
     readonly code: string,
@@ -120,8 +161,32 @@ export const api = {
 
   clearPlayer: () => request<{ deleted: number }>('/player/clear', { method: 'POST' }),
 
+  chats: () => request<{ chats: KnownChat[] }>('/chats'),
+
+  setPlayer: (chatId: number) =>
+    request<{ chat: KnownChat }>('/player', { method: 'POST', body: JSON.stringify({ chatId }) }),
+
+  disconnectPlayer: () => request('/player', { method: 'DELETE' }),
+
+  importLink: (url: string, playlistId?: number) =>
+    request<ImportResult>('/import', {
+      method: 'POST',
+      body: JSON.stringify({ url, playlistId }),
+    }),
+
+  startDownload: (url: string, playlistId?: number) =>
+    request<{ job: DownloadJob }>('/import/download', {
+      method: 'POST',
+      body: JSON.stringify({ url, playlistId }),
+    }),
+
+  downloadJob: (id: string) => request<{ job: DownloadJob }>(`/import/jobs/${id}`),
+
   renameTrack: (id: number, values: { title?: string | null; performer?: string | null }) =>
-    request<{ track: Track }>(`/tracks/${id}`, { method: 'PATCH', body: JSON.stringify(values) }),
+    request<{ track: Track; variant: VariantStatus }>(`/tracks/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(values),
+    }),
 
   sendTrack: (id: number) => request(`/tracks/${id}/send`, { method: 'POST' }),
 

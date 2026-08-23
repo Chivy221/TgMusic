@@ -1,11 +1,24 @@
+type BackButton = {
+  isVisible: boolean;
+  show(): void;
+  hide(): void;
+  onClick(handler: () => void): void;
+  offClick(handler: () => void): void;
+};
+
 type WebApp = {
   initData: string;
   initDataUnsafe: { start_param?: string; user?: { id: number; first_name?: string } };
+  version: string;
   ready(): void;
   expand(): void;
   openTelegramLink(url: string): void;
   openLink(url: string, options?: { try_instant_view?: boolean }): void;
   showAlert(message: string): void;
+  isVersionAtLeast(version: string): boolean;
+  /** Свайп вниз закрывает мини-апп — при скролле длинных списков это мешает. */
+  disableVerticalSwipes?(): void;
+  BackButton?: BackButton;
   HapticFeedback?: { impactOccurred(style: 'light' | 'medium' | 'heavy'): void };
   themeParams: Record<string, string>;
 };
@@ -27,11 +40,46 @@ export function insideTelegram(): boolean {
 
 export function initTelegram(): void {
   captureSessionFromUrl();
+  blockZoom();
 
   if (insideTelegram()) {
     tg?.ready();
     tg?.expand();
+    tg?.disableVerticalSwipes?.();
   }
+}
+
+/**
+ * Штатная кнопка «Назад» в шапке Telegram. Показанная, она встаёт на место
+ * закрывающего крестика — поэтому своих кнопок «назад» в интерфейсе быть не должно,
+ * иначе их получается две и обе делают разное.
+ */
+export const backButton = tg?.BackButton;
+
+export function hasNativeBack(): boolean {
+  return insideTelegram() && Boolean(backButton);
+}
+
+/**
+ * Двойной тап и щипок в мини-аппе не нужны: это интерфейс, а не документ.
+ * meta viewport закрывает Android и большую часть случаев, но Safari на iOS
+ * его игнорирует — там масштаб приходится гасить руками по жестам.
+ */
+function blockZoom(): void {
+  for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+    document.addEventListener(type, (event) => event.preventDefault(), { passive: false });
+  }
+
+  let lastTouch = 0;
+  document.addEventListener(
+    'touchend',
+    (event) => {
+      const now = Date.now();
+      if (now - lastTouch <= 350) event.preventDefault();
+      lastTouch = now;
+    },
+    { passive: false },
+  );
 }
 
 /**

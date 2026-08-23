@@ -4,6 +4,7 @@
  * Проверяет токен, канал-хранилище и права бота в нём — то есть всё, что иначе
  * всплывает уже в рантайме невнятной ошибкой Telegram.
  */
+import { spawn } from 'node:child_process';
 import { readBotToken, readChannelId, readWebappUrl } from '../env.js';
 import { Bot } from 'grammy';
 
@@ -100,9 +101,35 @@ try {
   failed = true;
 }
 
+section('Загрузка по ссылке');
+
+// Без этих двоих импорт по ссылке остаётся подбором по каталогу: разберёт
+// трек-лист, найдёт совпадения, но скачать недостающее будет нечем.
+for (const [name, argv] of [
+  ['yt-dlp', [process.env.YTDLP_PATH ?? 'yt-dlp', '--version']],
+  ['ffmpeg', ['ffmpeg', '-version']],
+] as const) {
+  const version = await probe(argv);
+  if (version) ok(`${name} — ${version}`);
+  else warn(`${name} не найден: скачивание по ссылке будет выключено`);
+}
+
 console.log('');
 console.log(failed ? 'Есть проблемы — см. отметки ✗ выше.' : 'Всё готово.');
 process.exit(failed ? 1 : 0);
+
+function probe(argv: readonly string[]): Promise<string | null> {
+  return new Promise((resolve) => {
+    const child = spawn(argv[0], argv.slice(1), { stdio: ['ignore', 'pipe', 'ignore'] });
+    let out = '';
+
+    child.stdout.on('data', (chunk) => (out += chunk));
+    child.on('error', () => resolve(null));
+    child.on('close', (code) =>
+      resolve(code === 0 ? (out.trim().split('\n')[0]?.slice(0, 60) ?? '') : null),
+    );
+  });
+}
 
 function describe(error: unknown): string {
   if (error && typeof error === 'object' && 'description' in error) {

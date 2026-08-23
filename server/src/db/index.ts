@@ -45,6 +45,7 @@ export function migrate(): void {
       performer TEXT,
       duration INTEGER,
       file_size INTEGER,
+      source_key TEXT,
       added_by INTEGER NOT NULL,
       created_at INTEGER NOT NULL
     );
@@ -93,6 +94,34 @@ export function migrate(): void {
       message_id INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS posted_messages_user_idx ON posted_messages (user_id);
+
+    CREATE TABLE IF NOT EXISTS chats (
+      id INTEGER PRIMARY KEY,
+      title TEXT,
+      type TEXT,
+      bot_status TEXT,
+      bot_can_delete INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_members (
+      user_id INTEGER NOT NULL,
+      chat_id INTEGER NOT NULL,
+      added_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, chat_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS track_variants (
+      user_id INTEGER NOT NULL,
+      track_id INTEGER NOT NULL,
+      file_id TEXT NOT NULL,
+      file_unique_id TEXT NOT NULL,
+      storage_message_id INTEGER NOT NULL,
+      title TEXT,
+      performer TEXT,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, track_id)
+    );
   `);
 
   // Базы, созданные до появления колонки, CREATE TABLE IF NOT EXISTS не чинит.
@@ -100,6 +129,8 @@ export function migrate(): void {
   addColumn('users', 'draft_stage', 'TEXT');
   addColumn('playlists', 'source_chat_id', 'INTEGER');
   addColumn('playlists', 'sync_enabled', 'INTEGER NOT NULL DEFAULT 0');
+  addColumn('tracks', 'source_key', 'TEXT');
+  sqlite.exec('CREATE INDEX IF NOT EXISTS tracks_source_idx ON tracks (source_key)');
 }
 
 function addColumn(table: string, column: string, definition: string): void {

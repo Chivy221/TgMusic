@@ -6,7 +6,7 @@ import { config } from './config.js';
 import { migrate } from './db/index.js';
 import { api } from './api/routes.js';
 import { bot } from './bot/bot.js';
-import './bot/handlers.js';
+import { COMMANDS } from './bot/handlers.js';
 
 export function start(): void {
   migrate();
@@ -26,7 +26,10 @@ export function start(): void {
 
   bot.start({
     drop_pending_updates: true,
-    onStart: (me) => console.log(`Бот @${me.username} запущен`),
+    onStart: async (me) => {
+      console.log(`Бот @${me.username} запущен`);
+      await publishCommands();
+    },
   });
 
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
@@ -35,5 +38,28 @@ export function start(): void {
       void bot.stop();
       process.exit(0);
     });
+  }
+}
+
+/**
+ * Команды и кнопка меню задаются на стороне Telegram и живут до следующей записи.
+ * Пишем их при каждом старте: иначе после правки списка в коде в переписке
+ * остаётся прошлый — а пустое меню выглядит как бот, который ничего не умеет.
+ */
+async function publishCommands(): Promise<void> {
+  try {
+    await bot.api.setMyCommands(COMMANDS);
+
+    // В группах из этого списка осмысленны только /player и /help — остальное
+    // относится к личной фонотеке и в общем чате только мешает.
+    await bot.api.setMyCommands(
+      COMMANDS.filter((command) => ['player', 'help'].includes(command.command)),
+      { scope: { type: 'all_group_chats' } },
+    );
+
+    await bot.api.setChatMenuButton({ menu_button: { type: 'commands' } });
+    console.log(`Команды опубликованы: ${COMMANDS.map((c) => `/${c.command}`).join(' ')}`);
+  } catch (error) {
+    console.error('[bot] не удалось опубликовать команды', error);
   }
 }

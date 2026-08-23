@@ -29,6 +29,20 @@ FROM node:22-slim AS runtime
 
 ENV NODE_ENV=production
 
+# Загрузка по ссылке: ffmpeg извлекает аудио, yt-dlp разбирает страницы площадок.
+# Берём готовый бинарник с релизов, а не пакет из Debian: тот отстаёт на месяцы,
+# а YouTube ломает загрузку регулярно — свежесть здесь важнее воспроизводимости.
+# Версия закреплена намеренно: обновление меняет поведение и должно быть решением.
+ARG YTDLP_VERSION=2026.08.19
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg ca-certificates curl \
+  && curl -fsSL "https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp_linux" \
+     -o /usr/local/bin/yt-dlp \
+  && chmod a+rx /usr/local/bin/yt-dlp \
+  && /usr/local/bin/yt-dlp --version \
+  && apt-get purge -y --auto-remove curl \
+  && rm -rf /var/lib/apt/lists/*
+
 # cwd — server/, поэтому статика находится по относительному пути ../miniapp/dist.
 WORKDIR /app/server
 
